@@ -27,15 +27,6 @@ Tensor tensor_create_2d(u32 xlen, u32 ylen) {
     return tensor;
 }
 
-Tensor tensor_init_identity(u32 xlen, u32 ylen) {
-    Tensor tensor = tensor_create_2d(xlen, ylen);
-    tensor_init_zeros(tensor);
-    for (int i = 0; i < fmin(xlen, ylen); i++) {
-        tensor.data[(i % xlen) + (i / xlen)] = 1;
-    }
-    return tensor;
-}
-
 
 Tensor tensor_copy(Tensor& tensor) {
     Tensor copy;
@@ -70,68 +61,59 @@ void tensor_init_random(Tensor& tensor) {
 }
 
 
-inline void tensor_add(Tensor& lhs, Tensor& rhs) {
-    tensor_check_same_shape(lhs, rhs);
-    for (int i = 0; i < lhs.length; i++) {
-        lhs.data[i] += rhs.data[i];
+void tensor_init_identity(Tensor& tensor) {
+    assert(tensor.ndim == 2);
+    tensor_init_zeros(tensor);
+
+    u32 xlen = tensor.shape[0];
+    u32 ylen = tensor.shape[1];
+    for (int i = 0; i < fmin(xlen, ylen); i++) {
+        tensor.data[i*xlen + i] = 1;
     }
 }
 
 
-inline Tensor tensor_copy_add(Tensor& lhs, Tensor& rhs) {
-    Tensor lhs_copy = tensor_copy(lhs);
-    tensor_add(lhs_copy, rhs);
-    return lhs_copy;
-}
-
-
-inline void tensor_mul(Tensor& lhs, Tensor& rhs) {
-    tensor_check_same_shape(lhs, rhs);
-    for (int i = 0; i < lhs.length; i++) {
-        lhs.data[i] *= rhs.data[i];
-    }
-}
-
-
-inline Tensor tensor_copy_mul(Tensor& lhs, Tensor& rhs) {
-    Tensor lhs_copy = tensor_copy(lhs);
-    tensor_mul(lhs_copy, rhs);
-    return lhs_copy;
-}
-
-
-inline void tensor_matmul(Tensor& lhs, Tensor& rhs) {
+Tensor tensor_matmul(Tensor& lhs, Tensor& rhs) {
     tensor_check_matmul_shape(lhs, rhs);
-    for (int i = 0; i < lhs.length; i++) {
-        lhs.data[i] *= rhs.data[i];
+    u32 xlen_lhs = lhs.shape[0];
+    u32 ylen_lhs = lhs.shape[1];
+    u32 xlen_rhs = rhs.shape[0];
+    Tensor out = tensor_create_2d(xlen_rhs, ylen_lhs);
+    tensor_init_zeros(out);
+    for (int j = 0; j < ylen_lhs; j++) {
+        for (int i = 0; i < xlen_rhs; i++) {
+            for (int k = 0; k < xlen_lhs; k++) {
+                out.data[i + j*xlen_rhs] += lhs.data[k + j*xlen_lhs]*rhs.data[i + k*xlen_rhs];
+            }
+        }
     }
+    return out;
 }
 
 
-inline Tensor tensor_copy_matmul(Tensor& lhs, Tensor& rhs) {
-    Tensor lhs_copy = tensor_copy(lhs);
-    tensor_mul(lhs_copy, rhs);
-    return lhs_copy;
-}
+void tensor_reshape(Tensor& tensor, u32 shape[], u8 ndim) {
+    u32 newLength = 1;
 
-
-inline void tensor_check_same_shape(Tensor& lhs, Tensor& rhs) {
-#ifdef DEBUG
-    assert(lhs.ndim == rhs.ndim);
-    assert(lhs.length == rhs.length);
-    for (int i = 0; i < lhs.ndim; i++) {
-        assert(lhs.shape[i] == rhs.shape[i]);
+    free(tensor.shape);
+    tensor.shape = (u32*) malloc(sizeof(u32)*ndim);
+    for (u8 i = 0; i < ndim; i++) {
+        newLength *= shape[i];
+        tensor.shape[i] = shape[i];
     }
-#endif
-}
 
+    if (newLength != tensor.length) {
+        float* newData = (float*) realloc((void*) tensor.data, sizeof(float)*newLength);
+        if (!newData) {
+            free(tensor.data);
+            tensor.data = (float*) malloc(sizeof(float)*newLength);
+            memcpy(newData, tensor.data, sizeof(float)*newLength);
+        }
+        tensor.data = newData;
+    }
+    std::cout << newLength << std::endl;
 
-inline void tensor_check_matmul_shape(Tensor& lhs, Tensor& rhs) {
-#ifdef DEBUG
-    assert(lhs.ndim == 2);
-    assert(rhs.ndim == 2);
-    assert(lhs.shape[0] == rhs.shape[1]);
-#endif
+    tensor.ndim = ndim;
+    tensor.length = newLength;
 }
 
 
